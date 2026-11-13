@@ -1,0 +1,14 @@
+#!/bin/sh
+# Thin launcher: run the package from the checkout, no install needed.
+# Works when symlinked onto your PATH.
+SELF="$0"
+while [ -L "$SELF" ]; do
+  LINK=$(readlink "$SELF")
+  case "$LINK" in /*) SELF="$LINK" ;; *) SELF="$(dirname "$SELF")/$LINK" ;; esac
+done
+ROOT="$(cd "$(dirname "$SELF")/.." && pwd)"
+PY="${IDLE_SHUTDOWN_PYTHON:-}"
+if [ -z "$PY" ]; then
+  if command -v python3 >/dev/null 2>&1; then PY=python3; else PY=/usr/bin/python3; fi
+fi
+PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" -m idle_shutdown "$@"

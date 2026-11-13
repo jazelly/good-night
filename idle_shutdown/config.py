@@ -1,0 +1,102 @@
+"""Configuration, read from environment variables (all optional)."""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import List
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        raise SystemExit(f"idle-shutdown: {name} must be an integer, got {raw!r}")
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _env_list(name: str, default: List[str]) -> List[str]:
+    raw = os.environ.get(name)
+    if raw is None:
+        return list(default)
+    return [x.strip() for x in raw.split(",") if x.strip()]
+
+
+# Apps we never ask to quit in the graceful step (Finder can't really quit;
+# terminals may be hosting this very process). `shutdown` stops them anyway.
+DEFAULT_KEEP_APPS = [
+    "com.apple.finder",
+    "com.apple.Terminal",
+    "com.googlecode.iterm2",
+    "com.mitchellh.ghostty",
+    "dev.warp.Warp-Stable",
+    "net.kovidgoyal.kitty",
+    "org.alacritty",
+    "com.github.wez.wezterm",
+]
+
+
+@dataclass
+class Config:
+    interval: int = 60
+    idle_checks: int = 3
+    detectors: List[str] = field(default_factory=lambda: ["claude", "cursor"])
+    dry_run: bool = False
+    grace: int = 60
+    dialog: bool = True
+    notify: bool = True
+    quiet: int = 90
+    stale_minutes: int = 30
+    lookback_hours: int = 12
+    quit_apps: bool = True
+    quit_wait: int = 20
+    keep_apps: List[str] = field(default_factory=lambda: list(DEFAULT_KEEP_APPS))
+    caffeinate: bool = True
+    claude_dir: Path = Path.home() / ".claude" / "projects"
+    cursor_dir: Path = Path.home() / ".cursor" / "projects"
+    log_file: Path = Path.home() / "Library" / "Logs" / "idle-shutdown.log"
+    state_dir: Path = Path.home() / "Library" / "Caches" / "idle-shutdown"
+
+    @property
+    def cancel_file(self) -> Path:
+        return self.state_dir / "cancel"
+
+
+def load() -> Config:
+    claude_root = os.environ.get("CLAUDE_CONFIG_DIR")
+    claude_default = (Path(claude_root) if claude_root else Path.home() / ".claude") / "projects"
+    dry = _env_bool("IDLE_SHUTDOWN_DRY_RUN", _env_bool("DRY_RUN", False))
+    cfg = Config(
+        interval=max(1, _env_int("IDLE_SHUTDOWN_INTERVAL", 60)),
+        idle_checks=max(1, _env_int("IDLE_SHUTDOWN_IDLE_CHECKS", 3)),
+        detectors=_env_list("IDLE_SHUTDOWN_DETECTORS", ["claude", "cursor"]),
+        dry_run=dry,
+        grace=max(0, _env_int("IDLE_SHUTDOWN_GRACE", 60)),
+        dialog=_env_bool("IDLE_SHUTDOWN_DIALOG", True),
+        notify=_env_bool("IDLE_SHUTDOWN_NOTIFY", True),
+        quiet=max(0, _env_int("IDLE_SHUTDOWN_QUIET", 90)),
+        stale_minutes=max(1, _env_int("IDLE_SHUTDOWN_STALE_MINUTES", 30)),
+        lookback_hours=max(1, _env_int("IDLE_SHUTDOWN_LOOKBACK_HOURS", 12)),
+        quit_apps=_env_bool("IDLE_SHUTDOWN_QUIT_APPS", True),
+        quit_wait=max(0, _env_int("IDLE_SHUTDOWN_QUIT_WAIT", 20)),
+        keep_apps=DEFAULT_KEEP_APPS + _env_list("IDLE_SHUTDOWN_KEEP_APPS", []),
+        caffeinate=_env_bool("IDLE_SHUTDOWN_CAFFEINATE", True),
+        claude_dir=Path(os.environ.get("IDLE_SHUTDOWN_CLAUDE_DIR", str(claude_default))).expanduser(),
+        cursor_dir=Path(
+            os.environ.get("IDLE_SHUTDOWN_CURSOR_DIR", str(Path.home() / ".cursor" / "projects"))
+        ).expanduser(),
+        log_file=Path(
+            os.environ.get("IDLE_SHUTDOWN_LOG", str(Path.home() / "Library" / "Logs" / "idle-shutdown.log"))
+        ).expanduser(),
+    )
+    return cfg
