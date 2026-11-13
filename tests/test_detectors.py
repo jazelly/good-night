@@ -9,10 +9,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from idle_shutdown import config  # noqa: E402
-from idle_shutdown.detectors import BUSY, IDLE, INFO  # noqa: E402
-from idle_shutdown.detectors import claude_code, cursor  # noqa: E402
-from idle_shutdown.util import parse_ts  # noqa: E402
+from good_night import config  # noqa: E402
+from good_night.detectors import BUSY, IDLE, INFO  # noqa: E402
+from good_night.detectors import claude_code, cursor  # noqa: E402
+from good_night.util import parse_ts  # noqa: E402
 
 
 def ts(minutes_ago=0.0):

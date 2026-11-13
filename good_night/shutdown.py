@@ -26,7 +26,7 @@ from . import macos
 SHUTDOWN_CMD = ["/usr/bin/sudo", "-n", "/sbin/shutdown", "-h", "now"]
 SUDO_CHECK_CMD = ["/usr/bin/sudo", "-n", "-l", "/sbin/shutdown", "-h", "now"]
 
-log = logging.getLogger("idle-shutdown")
+log = logging.getLogger("good-night")
 
 
 def sudo_ok() -> Tuple[bool, str]:
@@ -57,7 +57,7 @@ def countdown_dialog(seconds: int) -> subprocess.Popen:
     stdout contains 'Cancel' if the user cancelled."""
     script = (
         f'display dialog {_as("All AI agents look idle. Your Mac will shut down in " + str(seconds) + " seconds.")} '
-        f'with title "idle-shutdown" buttons {{"Cancel shutdown", "Shut down now"}} '
+        f'with title "good-night" buttons {{"Cancel shutdown", "Shut down now"}} '
         f'default button "Shut down now" cancel button "Cancel shutdown" '
         f'with icon caution giving up after {seconds}'
     )
@@ -156,7 +156,7 @@ def shutdown_now(dry_run: bool) -> bool:
     if p.returncode != 0:
         msg = (p.stderr or p.stdout).strip()
         log.error("SHUTDOWN FAILED (exit %d): %s", p.returncode, msg)
-        log.error("Is the sudoers rule installed? Run scripts/setup-sudo.sh, then `idle-shutdown check-sudo`.")
-        notify("idle-shutdown: SHUTDOWN FAILED", msg or "sudo -n /sbin/shutdown failed", sound="Basso")
+        log.error("Is the sudoers rule installed? Run scripts/setup-sudo.sh, then `good-night check-sudo`.")
+        notify("good-night: SHUTDOWN FAILED", msg or "sudo -n /sbin/shutdown failed", sound="Basso")
         return False
     return True

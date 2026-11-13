@@ -1,6 +1,6 @@
-# idle-shutdown
+# good-night
 
-Go to bed while your AI coding agents finish their work. `idle-shutdown`
+Go to bed while your AI coding agents finish their work. `good-night`
 watches **Claude Code** and **Cursor** on your Mac and, once every agent
 session has been idle for a few checks in a row, shuts the Mac down safely.
 
@@ -22,34 +22,34 @@ macOS only for now.
 ## Quick start
 
 ```sh
-git clone <this repo> idle-shutdown && cd idle-shutdown
+git clone <this repo> good-night && cd good-night
 
 # 1. one-time setup: sudo rule + every macOS permission prompt, then a check.
 #    Run it from the terminal app you'll run `watch` from (see below).
-./bin/idle-shutdown setup        # same as ./scripts/install.sh
+./bin/good-night setup        # same as ./scripts/install.sh
 
 # 2. see what it sees
-./bin/idle-shutdown status
+./bin/good-night status
 
 # 3. rehearse: logs everything, never shuts down
-DRY_RUN=1 ./bin/idle-shutdown watch
+DRY_RUN=1 ./bin/good-night watch
 
 # 4. before bed
-./bin/idle-shutdown watch
+./bin/good-night watch
 ```
 
-Optionally put it on your PATH: `ln -s "$PWD/bin/idle-shutdown" /usr/local/bin/`.
+Optionally put it on your PATH: `ln -s "$PWD/bin/good-night" /usr/local/bin/`.
 
 Run `watch` in a terminal or tmux and leave it alone. When all agents are idle
-for `IDLE_SHUTDOWN_IDLE_CHECKS` polls in a row, you get a notification and a
-countdown dialog (`IDLE_SHUTDOWN_GRACE` seconds). It re-checks the agents one
+for `GOOD_NIGHT_IDLE_CHECKS` polls in a row, you get a notification and a
+countdown dialog (`GOOD_NIGHT_GRACE` seconds). It re-checks the agents one
 last time, then shuts down.
 
 To cancel a countdown, use any of these:
 
 - click **Cancel shutdown** in the dialog,
 - press Ctrl-C in the terminal,
-- run `idle-shutdown cancel` (handy over SSH).
+- run `good-night cancel` (handy over SSH).
 
 ## Commands
 
@@ -84,34 +84,34 @@ Everything is set with environment variables, and all of them are optional.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `IDLE_SHUTDOWN_INTERVAL` | `60` | Seconds between checks. |
-| `IDLE_SHUTDOWN_IDLE_CHECKS` | `3` | Consecutive all-idle checks needed before the countdown starts (so 3 × 60s = 3 quiet minutes). |
-| `IDLE_SHUTDOWN_DETECTORS` | `claude,cursor` | Which detectors to use. |
-| `DRY_RUN` / `IDLE_SHUTDOWN_DRY_RUN` | `0` | `1` = log only, never quit apps or shut down. |
-| `IDLE_SHUTDOWN_GRACE` | `60` | Countdown seconds (notification + dialog) before shutting down. `0` = no countdown. |
-| `IDLE_SHUTDOWN_DIALOG` | `1` | Show the cancellable countdown dialog. |
-| `IDLE_SHUTDOWN_NOTIFY` | `1` | Show macOS notifications. |
-| `IDLE_SHUTDOWN_QUIET` | `90` | A session with activity in the last N seconds counts as busy even if its turn looks finished. |
-| `IDLE_SHUTDOWN_STALE_MINUTES` | `30` | A session that looks mid-turn but has had no activity for this long counts as idle (crashed, killed, or stuck on a permission prompt). |
-| `IDLE_SHUTDOWN_LOOKBACK_HOURS` | `12` | Only sessions whose files changed in this window are inspected. |
-| `IDLE_SHUTDOWN_QUIT_APPS` | `1` | Ask GUI apps to quit before shutting down. |
-| `IDLE_SHUTDOWN_QUIT_WAIT` | `20` | Seconds to wait for apps to quit before sending SIGTERM. |
-| `IDLE_SHUTDOWN_KEEP_APPS` | _(empty)_ | Extra bundle ids to leave alone in the quit step (comma-separated). Finder and common terminals are always kept. |
-| `IDLE_SHUTDOWN_CAFFEINATE` | `1` | Keep the Mac awake while watching (`caffeinate -is`), so it can't fall asleep before it shuts down. |
-| `IDLE_SHUTDOWN_CLAUDE_DIR` | `$CLAUDE_CONFIG_DIR/projects` or `~/.claude/projects` | Claude Code transcripts. |
-| `IDLE_SHUTDOWN_CURSOR_DIR` | `~/.cursor/projects` | Cursor transcripts. |
-| `IDLE_SHUTDOWN_LOG` | `~/Library/Logs/idle-shutdown.log` | Log file (also printed to stderr). |
+| `GOOD_NIGHT_INTERVAL` | `60` | Seconds between checks. |
+| `GOOD_NIGHT_IDLE_CHECKS` | `3` | Consecutive all-idle checks needed before the countdown starts (so 3 × 60s = 3 quiet minutes). |
+| `GOOD_NIGHT_DETECTORS` | `claude,cursor` | Which detectors to use. |
+| `DRY_RUN` / `GOOD_NIGHT_DRY_RUN` | `0` | `1` = log only, never quit apps or shut down. |
+| `GOOD_NIGHT_GRACE` | `60` | Countdown seconds (notification + dialog) before shutting down. `0` = no countdown. |
+| `GOOD_NIGHT_DIALOG` | `1` | Show the cancellable countdown dialog. |
+| `GOOD_NIGHT_NOTIFY` | `1` | Show macOS notifications. |
+| `GOOD_NIGHT_QUIET` | `90` | A session with activity in the last N seconds counts as busy even if its turn looks finished. |
+| `GOOD_NIGHT_STALE_MINUTES` | `30` | A session that looks mid-turn but has had no activity for this long counts as idle (crashed, killed, or stuck on a permission prompt). |
+| `GOOD_NIGHT_LOOKBACK_HOURS` | `12` | Only sessions whose files changed in this window are inspected. |
+| `GOOD_NIGHT_QUIT_APPS` | `1` | Ask GUI apps to quit before shutting down. |
+| `GOOD_NIGHT_QUIT_WAIT` | `20` | Seconds to wait for apps to quit before sending SIGTERM. |
+| `GOOD_NIGHT_KEEP_APPS` | _(empty)_ | Extra bundle ids to leave alone in the quit step (comma-separated). Finder and common terminals are always kept. |
+| `GOOD_NIGHT_CAFFEINATE` | `1` | Keep the Mac awake while watching (`caffeinate -is`), so it can't fall asleep before it shuts down. |
+| `GOOD_NIGHT_CLAUDE_DIR` | `$CLAUDE_CONFIG_DIR/projects` or `~/.claude/projects` | Claude Code transcripts. |
+| `GOOD_NIGHT_CURSOR_DIR` | `~/.cursor/projects` | Cursor transcripts. |
+| `GOOD_NIGHT_LOG` | `~/Library/Logs/good-night.log` | Log file (also printed to stderr). |
 
 Example: check every 30s, need 10 quiet checks (5 min), 2-minute countdown:
 
 ```sh
-IDLE_SHUTDOWN_INTERVAL=30 IDLE_SHUTDOWN_IDLE_CHECKS=10 IDLE_SHUTDOWN_GRACE=120 idle-shutdown watch
+GOOD_NIGHT_INTERVAL=30 GOOD_NIGHT_IDLE_CHECKS=10 GOOD_NIGHT_GRACE=120 good-night watch
 ```
 
 ## One-time setup (all prompts happen here)
 
 ```sh
-./bin/idle-shutdown setup
+./bin/good-night setup
 ```
 
 It goes through four steps:
@@ -146,7 +146,7 @@ attribute those to a different app.
 ### `doctor`: verify, never prompt
 
 ```
-$ ./bin/idle-shutdown doctor
+$ ./bin/good-night doctor
 INFO  host app            permissions are granted to iTerm2 (com.googlecode.iterm2); run `setup` and `watch` from this same app
 PASS  sudo shutdown rule  `sudo -n /sbin/shutdown -h now` needs no password
 PASS  notifications       osascript notifications already set up (no prompt)
@@ -162,7 +162,7 @@ PASS  quit apps           5 app(s) quit gracefully via AppleScript, 2 via SIGTER
 | Check | How it's checked without prompting | If it fails |
 |---|---|---|
 | sudo rule | `sudo -n -l /sbin/shutdown -h now` | `setup`, or `scripts/setup-sudo.sh` |
-| notifications | Notification Center prefs (`com.apple.ncprefs.plist`) list Script Editor, or `setup` already ran | `setup`, or `IDLE_SHUTDOWN_NOTIFY=0` |
+| notifications | Notification Center prefs (`com.apple.ncprefs.plist`) list Script Editor, or `setup` already ran | `setup`, or `GOOD_NIGHT_NOTIFY=0` |
 | quit apps | `AEDeterminePermissionToAutomateTarget(..., askUserIfNeeded=false)`: granted means AppleScript quit, while not asked, denied (-1743) or would-prompt (-1744) means SIGTERM | never fails. Change grants in System Settings > Privacy & Security > Automation > *your terminal* |
 | agent data | `listdir` on `~/.claude/projects`, `~/.cursor/projects` | System Settings > Privacy & Security > Files & Folders |
 | dialog, caffeinate | need no permission | n/a |
@@ -173,20 +173,20 @@ fail while you're asleep. In `DRY_RUN`, a missing sudo rule is only a warning.
 
 ### The sudoers rule
 
-`shutdown` needs root. `idle-shutdown` runs `sudo -n` (non-interactive) and
+`shutdown` needs root. `good-night` runs `sudo -n` (non-interactive) and
 never asks for or stores your password, so you add a sudoers rule that allows
 **exactly** `/sbin/shutdown -h now` without a password, and nothing else.
 
 `setup` does this for you via `scripts/setup-sudo.sh` (`--uninstall` removes
 it). The script writes the rule to its own drop-in file,
-`/etc/sudoers.d/idle-shutdown` (mode 0440, root:wheel), checks it with
+`/etc/sudoers.d/good-night` (mode 0440, root:wheel), checks it with
 `visudo -c` before installing so a typo can't lock you out of sudo, and then
 verifies that `sudo -n` works. It never edits `/etc/sudoers`.
 
 **Manual alternative:**
 
 ```sh
-sudo visudo -f /etc/sudoers.d/idle-shutdown
+sudo visudo -f /etc/sudoers.d/good-night
 ```
 
 Add this single line, with your short user name (`id -un`) in place of `YOUR_USER`:
@@ -198,7 +198,7 @@ YOUR_USER ALL=(root) NOPASSWD: /sbin/shutdown -h now
 Then check:
 
 ```sh
-sudo -k; sudo -n -l /sbin/shutdown -h now && echo OK   # or: idle-shutdown check-sudo
+sudo -k; sudo -n -l /sbin/shutdown -h now && echo OK   # or: good-night check-sudo
 ```
 
 macOS's default `/etc/sudoers` already contains
@@ -214,15 +214,15 @@ permission, so one unsaved document or stuck app cancels it. Instead:
    Automation access). Apps your terminal is already allowed to automate get
    an AppleScript `quit` so they can save state. Every other app gets SIGTERM,
    which needs no permission. Finder, terminal apps, and whatever app is
-   running `idle-shutdown` are skipped.
-2. **Terminate leftovers.** Apps still running after `IDLE_SHUTDOWN_QUIT_WAIT`
+   running `good-night` are skipped.
+2. **Terminate leftovers.** Apps still running after `GOOD_NIGHT_QUIT_WAIT`
    seconds get SIGTERM. An app stuck behind an unsaved-changes sheet will lose
    those unsaved changes.
 3. **Shut down.** `sudo -n /sbin/shutdown -h now`. This doesn't ask apps for
    permission, so nothing can block it.
 
 None of these steps can trigger a macOS permission prompt. Set
-`IDLE_SHUTDOWN_QUIT_APPS=0` to skip step 1 and go straight to `shutdown`, which
+`GOOD_NIGHT_QUIT_APPS=0` to skip step 1 and go straight to `shutdown`, which
 stops apps itself.
 
 ## How idle detection works
@@ -234,8 +234,8 @@ counts as busy.
 
 Two rules apply to every detector:
 
-- **Quiet window:** activity within `IDLE_SHUTDOWN_QUIET` seconds means busy.
-- **Stale rule:** "mid-turn" with no activity for `IDLE_SHUTDOWN_STALE_MINUTES`
+- **Quiet window:** activity within `GOOD_NIGHT_QUIET` seconds means busy.
+- **Stale rule:** "mid-turn" with no activity for `GOOD_NIGHT_STALE_MINUTES`
   means idle. This covers crashed or killed sessions and tool-permission
   prompts nobody will answer tonight.
 
@@ -293,7 +293,7 @@ is **ignored**. Those logs get a heartbeat line every 30 s
   session is idle.
 - **A tool call that runs silently for longer than `STALE_MINUTES`** (a very
   long build with no transcript writes) will eventually count as idle. Raise
-  `IDLE_SHUTDOWN_STALE_MINUTES` if your agents do that.
+  `GOOD_NIGHT_STALE_MINUTES` if your agents do that.
 - **Permission prompts:** a session waiting on "allow this command?" looks
   like a running tool until the stale rule kicks in.
 - **Transcript formats aren't public APIs**, so they may change. Use `status`
@@ -301,7 +301,7 @@ is **ignored**. Those logs get a heartbeat line every 30 s
 
 ## Adding a detector (e.g. Codex)
 
-Detectors live in `idle_shutdown/detectors/`. Subclass `Detector`, implement
+Detectors live in `good_night/detectors/`. Subclass `Detector`, implement
 `available()` and `sessions()`, return `Session(state=BUSY|IDLE|INFO, ...)`,
 pass each one through `self.finalize()` for the shared quiet/stale rules, and
 register the class in `detectors/__init__.py`. Add fixture-based tests in
@@ -315,7 +315,7 @@ python3 -m unittest discover -s tests -v
 
 - [ ] **Codex CLI** detector (`~/.codex/sessions/**/rollout-*.jsonl`)
 - [ ] Optional process-tree check for agent-spawned background jobs
-- [ ] `launchd` agent / `idle-shutdown arm` for "shut down tonight after ..."
+- [ ] `launchd` agent / `good-night arm` for "shut down tonight after ..."
 - [ ] Sleep or hibernate instead of shutdown (`pmset sleepnow`)
 - [ ] Homebrew formula
 

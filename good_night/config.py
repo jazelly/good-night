@@ -15,7 +15,7 @@ def _env_int(name: str, default: int) -> int:
     try:
         return int(raw)
     except ValueError:
-        raise SystemExit(f"idle-shutdown: {name} must be an integer, got {raw!r}")
+        raise SystemExit(f"good-night: {name} must be an integer, got {raw!r}")
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -64,8 +64,8 @@ class Config:
     caffeinate: bool = True
     claude_dir: Path = Path.home() / ".claude" / "projects"
     cursor_dir: Path = Path.home() / ".cursor" / "projects"
-    log_file: Path = Path.home() / "Library" / "Logs" / "idle-shutdown.log"
-    state_dir: Path = Path.home() / "Library" / "Caches" / "idle-shutdown"
+    log_file: Path = Path.home() / "Library" / "Logs" / "good-night.log"
+    state_dir: Path = Path.home() / "Library" / "Caches" / "good-night"
 
     @property
     def cancel_file(self) -> Path:
@@ -75,28 +75,28 @@ class Config:
 def load() -> Config:
     claude_root = os.environ.get("CLAUDE_CONFIG_DIR")
     claude_default = (Path(claude_root) if claude_root else Path.home() / ".claude") / "projects"
-    dry = _env_bool("IDLE_SHUTDOWN_DRY_RUN", _env_bool("DRY_RUN", False))
+    dry = _env_bool("GOOD_NIGHT_DRY_RUN", _env_bool("DRY_RUN", False))
     cfg = Config(
-        interval=max(1, _env_int("IDLE_SHUTDOWN_INTERVAL", 60)),
-        idle_checks=max(1, _env_int("IDLE_SHUTDOWN_IDLE_CHECKS", 3)),
-        detectors=_env_list("IDLE_SHUTDOWN_DETECTORS", ["claude", "cursor"]),
+        interval=max(1, _env_int("GOOD_NIGHT_INTERVAL", 60)),
+        idle_checks=max(1, _env_int("GOOD_NIGHT_IDLE_CHECKS", 3)),
+        detectors=_env_list("GOOD_NIGHT_DETECTORS", ["claude", "cursor"]),
         dry_run=dry,
-        grace=max(0, _env_int("IDLE_SHUTDOWN_GRACE", 60)),
-        dialog=_env_bool("IDLE_SHUTDOWN_DIALOG", True),
-        notify=_env_bool("IDLE_SHUTDOWN_NOTIFY", True),
-        quiet=max(0, _env_int("IDLE_SHUTDOWN_QUIET", 90)),
-        stale_minutes=max(1, _env_int("IDLE_SHUTDOWN_STALE_MINUTES", 30)),
-        lookback_hours=max(1, _env_int("IDLE_SHUTDOWN_LOOKBACK_HOURS", 12)),
-        quit_apps=_env_bool("IDLE_SHUTDOWN_QUIT_APPS", True),
-        quit_wait=max(0, _env_int("IDLE_SHUTDOWN_QUIT_WAIT", 20)),
-        keep_apps=DEFAULT_KEEP_APPS + _env_list("IDLE_SHUTDOWN_KEEP_APPS", []),
-        caffeinate=_env_bool("IDLE_SHUTDOWN_CAFFEINATE", True),
-        claude_dir=Path(os.environ.get("IDLE_SHUTDOWN_CLAUDE_DIR", str(claude_default))).expanduser(),
+        grace=max(0, _env_int("GOOD_NIGHT_GRACE", 60)),
+        dialog=_env_bool("GOOD_NIGHT_DIALOG", True),
+        notify=_env_bool("GOOD_NIGHT_NOTIFY", True),
+        quiet=max(0, _env_int("GOOD_NIGHT_QUIET", 90)),
+        stale_minutes=max(1, _env_int("GOOD_NIGHT_STALE_MINUTES", 30)),
+        lookback_hours=max(1, _env_int("GOOD_NIGHT_LOOKBACK_HOURS", 12)),
+        quit_apps=_env_bool("GOOD_NIGHT_QUIT_APPS", True),
+        quit_wait=max(0, _env_int("GOOD_NIGHT_QUIT_WAIT", 20)),
+        keep_apps=DEFAULT_KEEP_APPS + _env_list("GOOD_NIGHT_KEEP_APPS", []),
+        caffeinate=_env_bool("GOOD_NIGHT_CAFFEINATE", True),
+        claude_dir=Path(os.environ.get("GOOD_NIGHT_CLAUDE_DIR", str(claude_default))).expanduser(),
         cursor_dir=Path(
-            os.environ.get("IDLE_SHUTDOWN_CURSOR_DIR", str(Path.home() / ".cursor" / "projects"))
+            os.environ.get("GOOD_NIGHT_CURSOR_DIR", str(Path.home() / ".cursor" / "projects"))
         ).expanduser(),
         log_file=Path(
-            os.environ.get("IDLE_SHUTDOWN_LOG", str(Path.home() / "Library" / "Logs" / "idle-shutdown.log"))
+            os.environ.get("GOOD_NIGHT_LOG", str(Path.home() / "Library" / "Logs" / "good-night.log"))
         ).expanduser(),
     )
     return cfg

@@ -6,7 +6,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from idle_shutdown import config, doctor, macos  # noqa: E402
+from good_night import config, doctor, macos  # noqa: E402
 
 LSAPPINFO = '''
  1) "loginwindow" ASN:0x0-0x3003:
@@ -61,7 +61,7 @@ class Doctor(unittest.TestCase):
         return {c.name: c for c in checks}
 
     def test_missing_sudo_and_notifications_fail(self):
-        with mock.patch("idle_shutdown.shutdown.sudo_ok", return_value=(False, "a password is required")), \
+        with mock.patch("good_night.shutdown.sudo_ok", return_value=(False, "a password is required")), \
              mock.patch.object(macos, "notifications_decided", return_value=False):
             checks = doctor.run_checks(self.cfg)
         c = self.by_name(checks)
@@ -70,13 +70,13 @@ class Doctor(unittest.TestCase):
         self.assertEqual(len(doctor.failed(checks)), 2)
 
     def test_dry_run_only_warns_on_sudo(self):
-        with mock.patch("idle_shutdown.shutdown.sudo_ok", return_value=(False, "x")), \
+        with mock.patch("good_night.shutdown.sudo_ok", return_value=(False, "x")), \
              mock.patch.object(macos, "notifications_decided", return_value=True):
             checks = doctor.run_checks(self.cfg, dry_run=True)
         self.assertEqual(doctor.failed(checks), [])
 
     def test_all_good_and_quit_split(self):
-        with mock.patch("idle_shutdown.shutdown.sudo_ok", return_value=(True, "")), \
+        with mock.patch("good_night.shutdown.sudo_ok", return_value=(True, "")), \
              mock.patch.object(macos, "notifications_decided", return_value=True):
             checks = doctor.run_checks(self.cfg)
         self.assertEqual(doctor.failed(checks), [])
@@ -86,7 +86,7 @@ class Doctor(unittest.TestCase):
 
     def test_notifications_disabled_is_not_a_failure(self):
         self.cfg.notify = False
-        with mock.patch("idle_shutdown.shutdown.sudo_ok", return_value=(True, "")), \
+        with mock.patch("good_night.shutdown.sudo_ok", return_value=(True, "")), \
              mock.patch.object(macos, "notifications_decided", return_value=False):
             self.assertEqual(doctor.failed(doctor.run_checks(self.cfg)), [])
 

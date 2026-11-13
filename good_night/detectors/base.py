@@ -33,7 +33,7 @@ class Session:
 
 
 class Detector:
-    #: short id used in IDLE_SHUTDOWN_DETECTORS
+    #: short id used in GOOD_NIGHT_DETECTORS
     name = "base"
     #: human-readable name
     title = "Base"

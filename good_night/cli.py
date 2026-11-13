@@ -15,12 +15,12 @@ from . import __version__, config, doctor, macos, shutdown
 from .detectors import BUSY, IDLE, INFO, Detector, Session, build
 from .util import human_age
 
-log = logging.getLogger("idle-shutdown")
+log = logging.getLogger("good-night")
 
 
 def setup_logging(cfg: config.Config, verbose: bool) -> None:
     fmt = logging.Formatter("%(asctime)s %(levelname)-5s %(message)s", "%Y-%m-%d %H:%M:%S")
-    root = logging.getLogger("idle-shutdown")
+    root = logging.getLogger("good-night")
     root.setLevel(logging.DEBUG if verbose else logging.INFO)
     h = logging.StreamHandler(sys.stderr)
     h.setFormatter(fmt)
@@ -118,9 +118,9 @@ def grace_period(cfg: config.Config) -> bool:
         cfg.cancel_file.unlink()
     except FileNotFoundError:
         pass
-    log.info("all idle; shutting down in %ds. Cancel: Ctrl-C, the dialog, or `idle-shutdown cancel`", cfg.grace)
+    log.info("all idle; shutting down in %ds. Cancel: Ctrl-C, the dialog, or `good-night cancel`", cfg.grace)
     if cfg.notify:
-        shutdown.notify("idle-shutdown", f"All agents idle. Shutting down in {cfg.grace}s.")
+        shutdown.notify("good-night", f"All agents idle. Shutting down in {cfg.grace}s.")
     dialog = shutdown.countdown_dialog(cfg.grace) if cfg.dialog else None
     deadline = time.time() + cfg.grace
     try:
@@ -149,7 +149,7 @@ def grace_period(cfg: config.Config) -> bool:
 def cmd_watch(cfg: config.Config, args) -> int:
     detectors = build(cfg)
     mode = "DRY RUN" if cfg.dry_run else "LIVE"
-    log.info("idle-shutdown %s starting (%s): detectors=%s interval=%ds idle_checks=%d grace=%ds stale=%dm",
+    log.info("good-night %s starting (%s): detectors=%s interval=%ds idle_checks=%d grace=%ds stale=%dm",
              __version__, mode, ",".join(d.name for d in detectors), cfg.interval, cfg.idle_checks,
              cfg.grace, cfg.stale_minutes)
     # Preflight: refuse to start if anything later tonight could show a
@@ -162,7 +162,7 @@ def cmd_watch(cfg: config.Config, args) -> int:
             log.error("  FAIL %s: %s", c.name, c.detail)
             if c.fix:
                 log.error("       fix: %s", c.fix)
-        log.error("Run `idle-shutdown doctor` for details, or `idle-shutdown setup` once.")
+        log.error("Run `good-night doctor` for details, or `good-night setup` once.")
         return 2
     log.info("preflight OK (%s)", ", ".join(f"{c.name}={c.status}" for c in checks if c.status != doctor.INFO))
     if cfg.caffeinate:
@@ -192,10 +192,10 @@ def cmd_watch(cfg: config.Config, args) -> int:
                     ok, msg = shutdown.sudo_ok()
                     if not ok:
                         log.error("sudo check failed right before shutdown: %s", msg)
-                        shutdown.notify("idle-shutdown: SHUTDOWN FAILED", "passwordless sudo for shutdown is not set up", "Basso")
+                        shutdown.notify("good-night: SHUTDOWN FAILED", "passwordless sudo for shutdown is not set up", "Basso")
                         return 2
                 if cfg.notify:
-                    shutdown.notify("idle-shutdown", "Shutting down now." if not cfg.dry_run else "DRY RUN: would shut down now.")
+                    shutdown.notify("good-night", "Shutting down now." if not cfg.dry_run else "DRY RUN: would shut down now.")
                 if cfg.quit_apps:
                     shutdown.quit_apps(cfg.keep_apps, cfg.quit_wait, cfg.dry_run)
                 return 0 if shutdown.shutdown_now(cfg.dry_run) else 2
@@ -224,7 +224,7 @@ def cmd_doctor(cfg: config.Config, args) -> int:
     bad = doctor.failed(checks)
     print()
     if bad:
-        print(f"=> {len(bad)} problem(s); `watch` will refuse to start. Fix: ./bin/idle-shutdown setup")
+        print(f"=> {len(bad)} problem(s); `watch` will refuse to start. Fix: ./bin/good-night setup")
         return 1
     print("=> ready: `watch` will not show any permission prompt")
     return 0
@@ -244,7 +244,7 @@ def cmd_setup(cfg: config.Config, args) -> int:
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     host = macos.host_app()
     hname = host.name if host else "this terminal"
-    print(f"idle-shutdown setup (running inside {hname})")
+    print(f"good-night setup (running inside {hname})")
     print(f"macOS grants permissions per app: run `watch` from {hname} too, or rerun setup there.\n")
 
     # 1. sudoers rule
@@ -277,25 +277,25 @@ def cmd_setup(cfg: config.Config, args) -> int:
     # 3. notifications
     print("\n[3/4] notifications")
     if cfg.notify:
-        rc, out = _osascript('display notification "Test notification from idle-shutdown setup" '
-                             'with title "idle-shutdown" sound name "Glass"', timeout=30)
+        rc, out = _osascript('display notification "Test notification from good-night setup" '
+                             'with title "good-night" sound name "Glass"', timeout=30)
         cfg.state_dir.mkdir(parents=True, exist_ok=True)
         (cfg.state_dir / "notifications-initialized").touch()
         print("      sent a test notification" + ("" if rc == 0 else f" (osascript: {out})"))
         print("      if macOS asks whether Script Editor may send notifications, choose Allow")
     else:
-        print("      disabled (IDLE_SHUTDOWN_NOTIFY=0)")
+        print("      disabled (GOOD_NIGHT_NOTIFY=0)")
 
     # 4. countdown dialog (needs no permission; shown so you know what it looks like)
     print("\n[4/4] countdown dialog (no permission needed)")
     if cfg.dialog:
-        rc, out = _osascript('display dialog "This is the idle-shutdown countdown dialog. '
+        rc, out = _osascript('display dialog "This is the good-night countdown dialog. '
                              'At night it says how many seconds until shutdown, with a Cancel button." '
-                             'with title "idle-shutdown setup" buttons {"OK"} default button "OK" '
+                             'with title "good-night setup" buttons {"OK"} default button "OK" '
                              'giving up after 15', timeout=30)
         print("      ok" if rc == 0 else f"      dialog failed: {out}")
     else:
-        print("      disabled (IDLE_SHUTDOWN_DIALOG=0)")
+        print("      disabled (GOOD_NIGHT_DIALOG=0)")
 
     print("\n== verification (non-interactive) ==")
     return cmd_doctor(cfg, args)
@@ -309,7 +309,7 @@ def cmd_cancel(cfg: config.Config, args) -> int:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="idle-shutdown",
+    ap = argparse.ArgumentParser(prog="good-night",
                                  description="Shut your Mac down once your AI coding agents are idle.")
     ap.add_argument("--version", action="version", version=__version__)
     ap.add_argument("-v", "--verbose", action="store_true")

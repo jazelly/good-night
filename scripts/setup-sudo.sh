@@ -6,12 +6,12 @@
 #   ./scripts/setup-sudo.sh            install the rule (asks for your password once)
 #   ./scripts/setup-sudo.sh --uninstall
 #
-# The rule goes in its own drop-in file, /etc/sudoers.d/idle-shutdown, and is
+# The rule goes in its own drop-in file, /etc/sudoers.d/good-night, and is
 # syntax-checked with `visudo -c` before it is installed, so a typo can never
 # break sudo. /etc/sudoers itself is not touched.
 set -eu
 
-RULE_FILE=/etc/sudoers.d/idle-shutdown
+RULE_FILE=/etc/sudoers.d/good-night
 USER_NAME="${SUDO_USER:-$(id -un)}"
 
 if [ "$(uname -s)" != "Darwin" ]; then
@@ -36,10 +36,10 @@ if ! sudo grep -Eq '^[#@]includedir[[:space:]]+(/private)?/etc/sudoers\.d' /etc/
   exit 1
 fi
 
-TMP=$(mktemp -t idle-shutdown-sudoers)
+TMP=$(mktemp -t good-night-sudoers)
 trap 'rm -f "$TMP"' EXIT
 cat > "$TMP" <<RULE
-# Installed by idle-shutdown (scripts/setup-sudo.sh).
+# Installed by good-night (scripts/setup-sudo.sh).
 # Lets $USER_NAME run exactly "/sbin/shutdown -h now" without a password.
 $USER_NAME ALL=(root) NOPASSWD: /sbin/shutdown -h now
 RULE

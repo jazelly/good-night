@@ -25,7 +25,7 @@ def build(cfg: Config) -> List[Detector]:
         cls = REGISTRY.get(key)
         if cls is None:
             raise SystemExit(
-                f"idle-shutdown: unknown detector {raw!r} (known: {', '.join(sorted(REGISTRY))})"
+                f"good-night: unknown detector {raw!r} (known: {', '.join(sorted(REGISTRY))})"
             )
         out.append(cls(cfg))
     return out

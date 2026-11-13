@@ -55,7 +55,7 @@ def run_checks(cfg: Config, dry_run: bool = False) -> List[Check]:
     else:
         checks.append(Check("sudo shutdown rule", WARN if dry_run else FAIL,
                             f"passwordless shutdown not allowed ({msg or 'sudo -n failed'})",
-                            "run `./bin/idle-shutdown setup` (or ./scripts/setup-sudo.sh)"))
+                            "run `./bin/good-night setup` (or ./scripts/setup-sudo.sh)"))
 
     if cfg.notify:
         if macos.notifications_decided(cfg.state_dir):
@@ -63,13 +63,13 @@ def run_checks(cfg: Config, dry_run: bool = False) -> List[Check]:
         else:
             checks.append(Check("notifications", FAIL,
                                 "the first osascript notification may ask for permission",
-                                "run `./bin/idle-shutdown setup` once, or set IDLE_SHUTDOWN_NOTIFY=0"))
+                                "run `./bin/good-night setup` once, or set GOOD_NIGHT_NOTIFY=0"))
     else:
-        checks.append(Check("notifications", INFO, "disabled (IDLE_SHUTDOWN_NOTIFY=0)"))
+        checks.append(Check("notifications", INFO, "disabled (GOOD_NIGHT_NOTIFY=0)"))
 
     checks.append(Check("countdown dialog", PASS if cfg.dialog else INFO,
                         "osascript `display dialog` needs no permission" if cfg.dialog
-                        else "disabled (IDLE_SHUTDOWN_DIALOG=0)"))
+                        else "disabled (GOOD_NIGHT_DIALOG=0)"))
 
     checks.append(Check("caffeinate", PASS if Path("/usr/bin/caffeinate").exists() else WARN,
                         "keeps the Mac awake while watching; needs no permission"))
@@ -104,7 +104,7 @@ def run_checks(cfg: Config, dry_run: bool = False) -> List[Check]:
                             f"change later in {AUTOMATION_PANE} > {host.name if host else 'your terminal'}"
                             if sigterm else ""))
     else:
-        checks.append(Check("quit apps", INFO, "disabled (IDLE_SHUTDOWN_QUIT_APPS=0); shutdown stops apps itself"))
+        checks.append(Check("quit apps", INFO, "disabled (GOOD_NIGHT_QUIT_APPS=0); shutdown stops apps itself"))
     return checks
 
 
