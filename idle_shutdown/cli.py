@@ -11,7 +11,7 @@ import sys
 import time
 from typing import List, Tuple
 
-from . import __version__, config, shutdown
+from . import __version__, config, doctor, macos, shutdown
 from .detectors import BUSY, IDLE, INFO, Detector, Session, build
 from .util import human_age
 
@@ -152,12 +152,19 @@ def cmd_watch(cfg: config.Config, args) -> int:
     log.info("idle-shutdown %s starting (%s): detectors=%s interval=%ds idle_checks=%d grace=%ds stale=%dm",
              __version__, mode, ",".join(d.name for d in detectors), cfg.interval, cfg.idle_checks,
              cfg.grace, cfg.stale_minutes)
-    if not cfg.dry_run:
-        ok, msg = shutdown.sudo_ok()
-        if not ok:
-            log.error("sudo is not set up for passwordless `/sbin/shutdown -h now`:\n  %s", msg)
-            log.error("Run ./scripts/setup-sudo.sh once (see README), or use DRY_RUN=1.")
-            return 2
+    # Preflight: refuse to start if anything later tonight could show a
+    # permission prompt or fail. Every check here is non-interactive.
+    checks = doctor.run_checks(cfg, dry_run=cfg.dry_run)
+    bad = doctor.failed(checks)
+    if bad:
+        log.error("preflight failed; not starting so nothing can prompt or fail at night:")
+        for c in bad:
+            log.error("  FAIL %s: %s", c.name, c.detail)
+            if c.fix:
+                log.error("       fix: %s", c.fix)
+        log.error("Run `idle-shutdown doctor` for details, or `idle-shutdown setup` once.")
+        return 2
+    log.info("preflight OK (%s)", ", ".join(f"{c.name}={c.status}" for c in checks if c.status != doctor.INFO))
     if cfg.caffeinate:
         _start_caffeinate()
 
@@ -211,6 +218,89 @@ def cmd_check_sudo(cfg: config.Config, args) -> int:
     return 1
 
 
+def cmd_doctor(cfg: config.Config, args) -> int:
+    checks = doctor.run_checks(cfg, dry_run=False)
+    doctor.print_checks(checks)
+    bad = doctor.failed(checks)
+    print()
+    if bad:
+        print(f"=> {len(bad)} problem(s); `watch` will refuse to start. Fix: ./bin/idle-shutdown setup")
+        return 1
+    print("=> ready: `watch` will not show any permission prompt")
+    return 0
+
+
+def _osascript(script: str, timeout: int = 60) -> "tuple[int, str]":
+    try:
+        p = subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True, text=True, timeout=timeout)
+        return p.returncode, (p.stdout + p.stderr).strip()
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 1, str(e)
+
+
+def cmd_setup(cfg: config.Config, args) -> int:
+    """One-time interactive setup: every password / permission prompt happens
+    here, so `watch` never has to show one."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    host = macos.host_app()
+    hname = host.name if host else "this terminal"
+    print(f"idle-shutdown setup (running inside {hname})")
+    print(f"macOS grants permissions per app: run `watch` from {hname} too, or rerun setup there.\n")
+
+    # 1. sudoers rule
+    print("[1/4] passwordless `sudo /sbin/shutdown -h now`")
+    ok, _ = shutdown.sudo_ok()
+    if ok:
+        print("      already set up")
+    elif args.skip_sudo:
+        print("      skipped (--skip-sudo)")
+    else:
+        rc = subprocess.call([os.path.join(root, "scripts", "setup-sudo.sh")])
+        if rc != 0:
+            print("      sudo setup failed; fix it and rerun setup")
+            return 1
+
+    # 2. Automation grants for graceful quit (optional; SIGTERM otherwise)
+    print("\n[2/4] graceful quit permission for the apps open right now")
+    if not cfg.quit_apps or args.no_app_grants:
+        print("      skipped; apps will get SIGTERM, which needs no permission")
+    else:
+        print(f"      macOS will ask \"{hname} wants to control <app>\" once per app.")
+        print("      Allow = graceful quit at night; Don't Allow = SIGTERM instead. Neither prompts again.")
+        for a in doctor.quit_targets(cfg):
+            st = macos.automation_permission(a.bundle_id, ask=False)
+            if st == macos.ERR_AE_EVENT_WOULD_REQUIRE_CONSENT:
+                st = macos.automation_permission(a.bundle_id, ask=True)
+            print(f"      {a.name:28} {macos.PERMISSION_TEXT.get(st, st)}")
+        print("      Apps you open later just get SIGTERM; rerun setup any time to allow them too.")
+
+    # 3. notifications
+    print("\n[3/4] notifications")
+    if cfg.notify:
+        rc, out = _osascript('display notification "Test notification from idle-shutdown setup" '
+                             'with title "idle-shutdown" sound name "Glass"', timeout=30)
+        cfg.state_dir.mkdir(parents=True, exist_ok=True)
+        (cfg.state_dir / "notifications-initialized").touch()
+        print("      sent a test notification" + ("" if rc == 0 else f" (osascript: {out})"))
+        print("      if macOS asks whether Script Editor may send notifications, choose Allow")
+    else:
+        print("      disabled (IDLE_SHUTDOWN_NOTIFY=0)")
+
+    # 4. countdown dialog (needs no permission; shown so you know what it looks like)
+    print("\n[4/4] countdown dialog (no permission needed)")
+    if cfg.dialog:
+        rc, out = _osascript('display dialog "This is the idle-shutdown countdown dialog. '
+                             'At night it says how many seconds until shutdown, with a Cancel button." '
+                             'with title "idle-shutdown setup" buttons {"OK"} default button "OK" '
+                             'giving up after 15', timeout=30)
+        print("      ok" if rc == 0 else f"      dialog failed: {out}")
+    else:
+        print("      disabled (IDLE_SHUTDOWN_DIALOG=0)")
+
+    print("\n== verification (non-interactive) ==")
+    return cmd_doctor(cfg, args)
+
+
 def cmd_cancel(cfg: config.Config, args) -> int:
     cfg.state_dir.mkdir(parents=True, exist_ok=True)
     cfg.cancel_file.touch()
@@ -231,6 +321,11 @@ def main(argv=None) -> int:
     p.add_argument("--json", action="store_true")
     p.add_argument("--all", action="store_true", help="list all idle sessions")
     sub.add_parser("check-sudo", help="verify the passwordless shutdown sudoers rule")
+    sub.add_parser("doctor", help="non-interactive check that `watch` will never prompt")
+    p = sub.add_parser("setup", help="one-time setup: sudo rule + every permission prompt, then doctor")
+    p.add_argument("--skip-sudo", action="store_true", help="don't install the sudoers rule")
+    p.add_argument("--no-app-grants", action="store_true",
+                   help="don't ask for graceful-quit permission; always use SIGTERM")
     sub.add_parser("cancel", help="cancel a running countdown")
     args = ap.parse_args(argv)
 
@@ -251,6 +346,10 @@ def main(argv=None) -> int:
         return cmd_status(cfg, args)
     if cmd == "check-sudo":
         return cmd_check_sudo(cfg, args)
+    if cmd == "doctor":
+        return cmd_doctor(cfg, args)
+    if cmd == "setup":
+        return cmd_setup(cfg, args)
     if cmd == "cancel":
         return cmd_cancel(cfg, args)
     ap.error(f"unknown command {cmd}")

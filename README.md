@@ -11,6 +11,9 @@ session has been idle for a few checks in a row, shuts the Mac down safely.
   Only real session activity does.
 - Uses `sudo -n /sbin/shutdown -h now`, so "Save changes?" dialogs and apps
   that refuse to quit can't block it.
+- **Every password and permission prompt happens once, during `setup`.** A
+  real `watch` run never shows one: it checks everything up front without
+  prompting and refuses to start if something isn't ready.
 - Zero dependencies: Python 3.9+ standard library (the `/usr/bin/python3`
   that ships with the Xcode Command Line Tools is fine).
 
@@ -21,9 +24,9 @@ macOS only for now.
 ```sh
 git clone <this repo> idle-shutdown && cd idle-shutdown
 
-# 1. one-time: allow passwordless `shutdown -h now` (asks for your password once)
-./scripts/setup-sudo.sh
-./bin/idle-shutdown check-sudo
+# 1. one-time setup: sudo rule + every macOS permission prompt, then a check.
+#    Run it from the terminal app you'll run `watch` from (see below).
+./bin/idle-shutdown setup        # same as ./scripts/install.sh
 
 # 2. see what it sees
 ./bin/idle-shutdown status
@@ -54,6 +57,8 @@ To cancel a countdown, use any of these:
 |---|---|
 | `watch` (default) | Poll, then shut down when everything is idle. `--dry-run` never shuts down; `--once` runs a single check. |
 | `status` | List every detector's recent sessions as BUSY / idle / info. Exit code 1 if anything is busy. `--json`, `--all`. |
+| `setup` | One-time, interactive: installs the sudoers rule, shows every macOS permission prompt, then runs `doctor`. `--skip-sudo`, `--no-app-grants`. |
+| `doctor` | Non-interactive PASS/FAIL check that `watch` won't prompt or fail. Never shows a prompt itself. |
 | `check-sudo` | Verify the sudoers rule (`sudo -n -l /sbin/shutdown -h now`). |
 | `cancel` | Cancel a running countdown. |
 
@@ -103,25 +108,82 @@ Example: check every 30s, need 10 quiet checks (5 min), 2-minute countdown:
 IDLE_SHUTDOWN_INTERVAL=30 IDLE_SHUTDOWN_IDLE_CHECKS=10 IDLE_SHUTDOWN_GRACE=120 idle-shutdown watch
 ```
 
-## One-time sudo setup
+## One-time setup (all prompts happen here)
+
+```sh
+./bin/idle-shutdown setup
+```
+
+It goes through four steps:
+
+1. **sudo rule.** Runs `scripts/setup-sudo.sh`, which asks for your login
+   password once in the terminal (details below).
+2. **Graceful-quit permission (optional).** For each app open right now,
+   macOS shows *"<Terminal> wants access to control <App>"* once. **Allow**
+   means that app gets a normal AppleScript `quit` at night, so it can save
+   state. **Don't Allow** means it gets SIGTERM instead. Either answer is
+   remembered, so nothing asks again. Apps you open later, or that you never
+   allowed, just get SIGTERM, which needs no permission. Rerun `setup` any
+   time to add apps, or use `--no-app-grants` to skip this step.
+3. **Notifications.** Sends one test notification. If macOS asks whether
+   *Script Editor* may send notifications (that's how `osascript` notifications
+   show up), choose Allow.
+4. **Countdown dialog.** Shows a sample dialog. `display dialog` needs no
+   permission; this is just so you know what it looks like.
+
+Then it runs `doctor`.
+
+### Run `setup` and `watch` from the same app
+
+macOS grants privacy permissions to the **app that hosts the process**:
+Terminal, iTerm2, Ghostty, or Cursor's integrated terminal. Each one has its
+own grants. If you set up in iTerm2 and later run `watch` from Terminal, the
+grants don't carry over. `doctor` prints which app it's attributing to
+(`host app`), and `watch` runs the same checks on startup. Start `watch` in a
+normal terminal window, not inside a detached tmux session, because macOS may
+attribute those to a different app.
+
+### `doctor`: verify, never prompt
+
+```
+$ ./bin/idle-shutdown doctor
+INFO  host app            permissions are granted to iTerm2 (com.googlecode.iterm2); run `setup` and `watch` from this same app
+PASS  sudo shutdown rule  `sudo -n /sbin/shutdown -h now` needs no password
+PASS  notifications       osascript notifications already set up (no prompt)
+PASS  countdown dialog    osascript `display dialog` needs no permission
+PASS  caffeinate          keeps the Mac awake while watching; needs no permission
+PASS  claude data         /Users/you/.claude/projects readable
+PASS  cursor data         /Users/you/.cursor/projects readable
+PASS  quit apps           5 app(s) quit gracefully via AppleScript, 2 via SIGTERM; this step never prompts
+
+=> ready: `watch` will not show any permission prompt
+```
+
+| Check | How it's checked without prompting | If it fails |
+|---|---|---|
+| sudo rule | `sudo -n -l /sbin/shutdown -h now` | `setup`, or `scripts/setup-sudo.sh` |
+| notifications | Notification Center prefs (`com.apple.ncprefs.plist`) list Script Editor, or `setup` already ran | `setup`, or `IDLE_SHUTDOWN_NOTIFY=0` |
+| quit apps | `AEDeterminePermissionToAutomateTarget(..., askUserIfNeeded=false)`: granted means AppleScript quit, while not asked, denied (-1743) or would-prompt (-1744) means SIGTERM | never fails. Change grants in System Settings > Privacy & Security > Automation > *your terminal* |
+| agent data | `listdir` on `~/.claude/projects`, `~/.cursor/projects` | System Settings > Privacy & Security > Files & Folders |
+| dialog, caffeinate | need no permission | n/a |
+
+`watch` runs the same checks at startup. If any check is FAIL, it logs why
+and exits with code 2 before it starts watching, so nothing can prompt or
+fail while you're asleep. In `DRY_RUN`, a missing sudo rule is only a warning.
+
+### The sudoers rule
 
 `shutdown` needs root. `idle-shutdown` runs `sudo -n` (non-interactive) and
 never asks for or stores your password, so you add a sudoers rule that allows
 **exactly** `/sbin/shutdown -h now` without a password, and nothing else.
 
-**Scripted (recommended):**
-
-```sh
-./scripts/setup-sudo.sh          # install
-./scripts/setup-sudo.sh --uninstall
-```
-
-The script writes the rule to its own drop-in file
+`setup` does this for you via `scripts/setup-sudo.sh` (`--uninstall` removes
+it). The script writes the rule to its own drop-in file,
 `/etc/sudoers.d/idle-shutdown` (mode 0440, root:wheel), checks it with
 `visudo -c` before installing so a typo can't lock you out of sudo, and then
 verifies that `sudo -n` works. It never edits `/etc/sudoers`.
 
-**Manual:**
+**Manual alternative:**
 
 ```sh
 sudo visudo -f /etc/sudoers.d/idle-shutdown
@@ -142,28 +204,26 @@ sudo -k; sudo -n -l /sbin/shutdown -h now && echo OK   # or: idle-shutdown check
 macOS's default `/etc/sudoers` already contains
 `#includedir /private/etc/sudoers.d`, so the drop-in is picked up.
 
-If the rule is missing, `watch` refuses to start (exit 2) and says why. It
-checks again right before shutting down and, if that check fails, shows a
-"SHUTDOWN FAILED" notification instead of failing silently. `DRY_RUN=1` works
-without the rule.
-
 ## How shutting down works
 
 A normal "Shut Down" (Apple menu or AppleScript) asks every app for
 permission, so one unsaved document or stuck app cancels it. Instead:
 
-1. **Graceful quit:** every regular (Dock) app is asked to `quit` via
-   AppleScript, in parallel, so it can save state. Finder, terminal apps, and
-   whatever app is running `idle-shutdown` are skipped.
-2. **Terminate leftovers:** apps still running after `IDLE_SHUTDOWN_QUIT_WAIT`
+1. **Quit apps without prompting.** The list of open apps comes from
+   `lsappinfo`, which needs no permission (asking System Events would need
+   Automation access). Apps your terminal is already allowed to automate get
+   an AppleScript `quit` so they can save state. Every other app gets SIGTERM,
+   which needs no permission. Finder, terminal apps, and whatever app is
+   running `idle-shutdown` are skipped.
+2. **Terminate leftovers.** Apps still running after `IDLE_SHUTDOWN_QUIT_WAIT`
    seconds get SIGTERM. An app stuck behind an unsaved-changes sheet will lose
    those unsaved changes.
-3. **Shut down:** `sudo -n /sbin/shutdown -h now`. This doesn't ask apps for
+3. **Shut down.** `sudo -n /sbin/shutdown -h now`. This doesn't ask apps for
    permission, so nothing can block it.
 
-The first run of step 1 may trigger a macOS prompt asking to let your
-terminal control "System Events". Allow it, or set `IDLE_SHUTDOWN_QUIT_APPS=0`
-to skip straight to `shutdown`.
+None of these steps can trigger a macOS permission prompt. Set
+`IDLE_SHUTDOWN_QUIT_APPS=0` to skip step 1 and go straight to `shutdown`, which
+stops apps itself.
 
 ## How idle detection works
 

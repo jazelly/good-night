@@ -3,7 +3,9 @@
 A plain "Shut Down" (System Events / AppleScript) is cancelled by any app that
 shows a "save changes?" sheet or refuses to quit. So we:
 
-  1. politely ask every regular GUI app to quit (lets them save state),
+  1. ask every regular GUI app to quit: AppleScript `quit` for apps the
+     terminal is already allowed to automate, SIGTERM for the rest, so this
+     step can never show a permission prompt,
   2. SIGTERM whatever is still running after a short wait,
   3. run `sudo -n /sbin/shutdown -h now`, which does not ask apps for
      permission. `-n` means sudo never prompts; if the sudoers rule is missing
@@ -18,6 +20,8 @@ import signal
 import subprocess
 import time
 from typing import List, Tuple
+
+from . import macos
 
 SHUTDOWN_CMD = ["/usr/bin/sudo", "-n", "/sbin/shutdown", "-h", "now"]
 SUDO_CHECK_CMD = ["/usr/bin/sudo", "-n", "-l", "/sbin/shutdown", "-h", "now"]
@@ -81,40 +85,6 @@ def _ancestor_pids() -> set:
     return pids
 
 
-def gui_apps() -> List[Tuple[int, str, str]]:
-    """(pid, bundle id, name) of every foreground (Dock) app."""
-    script = (
-        'set out to ""\n'
-        'tell application "System Events"\n'
-        '  repeat with p in (every process whose background only is false)\n'
-        '    set bid to ""\n'
-        '    try\n'
-        '      set bid to bundle identifier of p\n'
-        '    end try\n'
-        '    set out to out & (unix id of p) & tab & bid & tab & (name of p) & linefeed\n'
-        '  end repeat\n'
-        'end tell\n'
-        'return out'
-    )
-    try:
-        p = subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True, text=True, timeout=30)
-    except (OSError, subprocess.TimeoutExpired) as e:
-        log.warning("could not list apps: %s", e)
-        return []
-    if p.returncode != 0:
-        log.warning("could not list apps (grant Automation permission for System Events?): %s", p.stderr.strip())
-        return []
-    apps = []
-    for line in p.stdout.splitlines():
-        parts = line.split("\t")
-        if len(parts) >= 3:
-            try:
-                apps.append((int(parts[0]), parts[1], parts[2]))
-            except ValueError:
-                continue
-    return apps
-
-
 def _alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -126,37 +96,54 @@ def _alive(pid: int) -> bool:
 
 
 def quit_apps(keep: List[str], wait: int, dry_run: bool) -> None:
+    """Quit foreground apps without ever triggering a permission prompt.
+
+    Apps the host terminal is already allowed to automate get a normal
+    AppleScript `quit` (they can save state / run their quit handlers). Every
+    other app gets SIGTERM, which needs no permission at all. Anything still
+    alive after `wait` seconds gets SIGTERM too.
+    """
     keep_set = {k.lower() for k in keep}
     mine = _ancestor_pids()
-    targets = [a for a in gui_apps() if a[1].lower() not in keep_set and a[0] not in mine]
+    targets = [a for a in macos.running_apps() if a.bundle_id.lower() not in keep_set and a.pid not in mine]
     if not targets:
         log.info("no apps to quit")
         return
-    for pid, bid, name in targets:
-        log.info("%s quit %s (%s, pid %d)", "would" if dry_run else "asking to", name, bid or "no bundle id", pid)
+    procs = []
+    for app in targets:
+        perm = macos.automation_permission(app.bundle_id, ask=False) if app.bundle_id else -1
+        how = "AppleScript quit" if perm == macos.NO_ERR else "SIGTERM (no Automation grant, so no prompt)"
+        log.info("%s %s (%s, pid %d) via %s", "would quit" if dry_run else "quitting",
+                 app.name, app.bundle_id or "no bundle id", app.pid, how)
+        if dry_run:
+            continue
+        if perm == macos.NO_ERR:
+            script = f"with timeout of {max(5, wait)} seconds\n tell application id {_as(app.bundle_id)} to quit\nend timeout"
+            procs.append(subprocess.Popen(["/usr/bin/osascript", "-e", script],
+                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+        else:
+            _term(app.pid)
     if dry_run:
         return
-    procs = []
-    for pid, bid, name in targets:
-        target = f"application id {_as(bid)}" if bid else f"application {_as(name)}"
-        script = f"with timeout of {max(5, wait)} seconds\n tell {target} to quit\nend timeout"
-        procs.append(subprocess.Popen(["/usr/bin/osascript", "-e", script],
-                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
     deadline = time.time() + wait
-    while time.time() < deadline and any(_alive(pid) for pid, _, _ in targets):
+    while time.time() < deadline and any(_alive(a.pid) for a in targets):
         time.sleep(1)
     for p in procs:
         if p.poll() is None:
             p.kill()
-    leftovers = [(pid, name) for pid, _, name in targets if _alive(pid)]
-    for pid, name in leftovers:
-        log.info("%s did not quit in %ds, sending SIGTERM (pid %d)", name, wait, pid)
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except (ProcessLookupError, PermissionError):
-            pass
+    leftovers = [a for a in targets if _alive(a.pid)]
+    for a in leftovers:
+        log.info("%s still running after %ds, sending SIGTERM (pid %d)", a.name, wait, a.pid)
+        _term(a.pid)
     if leftovers:
         time.sleep(5)
+
+
+def _term(pid: int) -> None:
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        pass
 
 
 def shutdown_now(dry_run: bool) -> bool:
