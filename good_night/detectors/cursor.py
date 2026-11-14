@@ -95,9 +95,13 @@ class CursorDetector(Detector):
         except ValueError:
             slug = path.parent.name
         # "Users-alice-Desktop-code-foo" -> "Desktop-code-foo"
-        home = "-".join(Path.home().parts[1:])
-        if home and slug.startswith(home + "-"):
-            slug = slug[len(home) + 1 :]
+        # On Windows the slug may start with the drive letter: "c-Users-alice-...".
+        parts = Path.home().parts
+        home = "-".join(p.strip("\\/:") for p in parts[1:])
+        drive = parts[0].strip("\\/:") if parts else ""
+        for prefix in (home, f"{drive}-{home}" if drive else ""):
+            if prefix and slug.lower().startswith(prefix.lower() + "-"):
+                return slug[len(prefix) + 1 :]
         return slug
 
     def inspect(self, path: Path) -> Optional[Session]:

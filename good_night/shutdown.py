@@ -1,4 +1,7 @@
-"""Safe shutdown for macOS.
+"""macOS side of the good-night action (only used on macOS).
+
+`sleep` and `display-off` are a plain `pmset sleepnow` / `pmset
+displaysleepnow` (no sudo, apps stay open). `shutdown` is the careful one:
 
 A plain "Shut Down" (System Events / AppleScript) is cancelled by any app that
 shows a "save changes?" sheet or refuses to quit. So we:
@@ -21,10 +24,10 @@ import subprocess
 import time
 from typing import List, Tuple
 
-from . import macos
+from . import actions, macos
 
-SHUTDOWN_CMD = ["/usr/bin/sudo", "-n", "/sbin/shutdown", "-h", "now"]
-SUDO_CHECK_CMD = ["/usr/bin/sudo", "-n", "-l", "/sbin/shutdown", "-h", "now"]
+SHUTDOWN_CMD = actions.MAC_SHUTDOWN
+SUDO_CHECK_CMD = actions.MAC_SUDO_CHECK
 
 log = logging.getLogger("good-night")
 
@@ -52,13 +55,14 @@ def _as(s: str) -> str:
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def countdown_dialog(seconds: int) -> subprocess.Popen:
+def countdown_dialog(seconds: int, action: str = actions.SHUTDOWN) -> subprocess.Popen:
     """Show a dialog that auto-confirms after `seconds`. Returns the process;
-    stdout contains 'Cancel' if the user cancelled."""
+    see parse_dialog() for reading the answer."""
+    verb, now_label, _ = actions.words(action)
     script = (
-        f'display dialog {_as("All AI agents look idle. Your Mac will shut down in " + str(seconds) + " seconds.")} '
-        f'with title "good-night" buttons {{"Cancel shutdown", "Shut down now"}} '
-        f'default button "Shut down now" cancel button "Cancel shutdown" '
+        f'display dialog {_as("All AI agents look idle. Your Mac will " + verb + " in " + str(seconds) + " seconds.")} '
+        f'with title "good-night" buttons {{"Cancel", {_as(now_label)}}} '
+        f'default button {_as(now_label)} cancel button "Cancel" '
         f'with icon caution giving up after {seconds}'
     )
     return subprocess.Popen(
@@ -67,6 +71,22 @@ def countdown_dialog(seconds: int) -> subprocess.Popen:
         stderr=subprocess.PIPE,
         text=True,
     )
+
+
+def parse_dialog(returncode: int, out: str, err: str, action: str = actions.SHUTDOWN) -> str:
+    """'now', 'cancel', 'timeout' or 'error' from the osascript dialog."""
+    out, err = out or "", err or ""
+    if returncode != 0:
+        if "-128" in err or "cancel" in err.lower():
+            return "cancel"
+        return "error"
+    if "gave up:true" in out:
+        return "timeout"
+    if actions.words(action)[1] in out:
+        return "now"
+    if "Cancel" in out:
+        return "cancel"
+    return "timeout"
 
 
 def _ancestor_pids() -> set:
@@ -146,17 +166,28 @@ def _term(pid: int) -> None:
         pass
 
 
-def shutdown_now(dry_run: bool) -> bool:
-    cmd = " ".join(SHUTDOWN_CMD)
+def run_action(action: str, dry_run: bool) -> bool:
+    """pmset sleepnow / displaysleepnow, or sudo -n shutdown -h now."""
+    step = actions.plan(action, "macos")
     if dry_run:
-        log.info("DRY RUN: would run: %s", cmd)
+        log.info("DRY RUN: would run: %s", step.display)
         return True
-    log.info("running: %s", cmd)
-    p = subprocess.run(SHUTDOWN_CMD, capture_output=True, text=True)
+    log.info("running: %s", step.display)
+    try:
+        p = subprocess.run(step.argv, capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        log.error("%s FAILED: %s", action.upper(), e)
+        notify(f"good-night: {action} FAILED", str(e), sound="Basso")
+        return False
     if p.returncode != 0:
         msg = (p.stderr or p.stdout).strip()
-        log.error("SHUTDOWN FAILED (exit %d): %s", p.returncode, msg)
-        log.error("Is the sudoers rule installed? Run scripts/setup-sudo.sh, then `good-night check-sudo`.")
-        notify("good-night: SHUTDOWN FAILED", msg or "sudo -n /sbin/shutdown failed", sound="Basso")
+        log.error("%s FAILED (exit %d): %s", action.upper(), p.returncode, msg)
+        if actions.needs_sudo(action, "macos"):
+            log.error("Is the sudoers rule installed? Run scripts/setup-sudo.sh, then `good-night check-sudo`.")
+        notify(f"good-night: {action} FAILED", msg or f"{step.display} failed", sound="Basso")
         return False
     return True
+
+
+def shutdown_now(dry_run: bool) -> bool:
+    return run_action(actions.SHUTDOWN, dry_run)

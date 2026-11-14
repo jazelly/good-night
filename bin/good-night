@@ -1,14 +1,22 @@
-#!/bin/sh
-# Thin launcher: run the package from the checkout, no install needed.
-# Works when symlinked onto your PATH.
-SELF="$0"
-while [ -L "$SELF" ]; do
-  LINK=$(readlink "$SELF")
-  case "$LINK" in /*) SELF="$LINK" ;; *) SELF="$(dirname "$SELF")/$LINK" ;; esac
-done
-ROOT="$(cd "$(dirname "$SELF")/.." && pwd)"
-PY="${GOOD_NIGHT_PYTHON:-}"
-if [ -z "$PY" ]; then
-  if command -v python3 >/dev/null 2>&1; then PY=python3; else PY=/usr/bin/python3; fi
-fi
-PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" -m good_night "$@"
+#!/usr/bin/env python3
+# good-night launcher: runs the package from this checkout, no install needed.
+#   macOS / Linux:  ./bin/good-night <command>      (also works when symlinked onto PATH)
+#   Windows:        python bin\good-night <command>   or   bin\good-night.cmd <command>
+# Set GOOD_NIGHT_PYTHON to run with a specific interpreter (macOS / Linux).
+import os
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+
+alt = os.environ.get("GOOD_NIGHT_PYTHON")
+if alt and os.name != "nt" and not os.environ.get("_GOOD_NIGHT_REEXEC"):
+    os.environ["_GOOD_NIGHT_REEXEC"] = "1"
+    os.execvp(alt, [alt, os.path.realpath(__file__)] + sys.argv[1:])
+
+if sys.version_info < (3, 9):
+    sys.exit("good-night needs Python 3.9 or newer (this is %d.%d)" % sys.version_info[:2])
+
+sys.path.insert(0, ROOT)
+from good_night.cli import main  # noqa: E402
+
+sys.exit(main())

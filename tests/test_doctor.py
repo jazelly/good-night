@@ -39,7 +39,8 @@ class Doctor(unittest.TestCase):
         root = Path(self.tmp.name)
         (root / "claude").mkdir()
         (root / "cursor").mkdir()
-        self.cfg = config.Config(claude_dir=root / "claude", cursor_dir=root / "cursor", state_dir=root / "state")
+        self.cfg = config.Config(claude_dir=root / "claude", cursor_dir=root / "cursor", state_dir=root / "state",
+                                 platform="macos", action="shutdown")
         apps = macos.parse_lsappinfo(LSAPPINFO)
         perms = {"com.todesktop.230313mzl4w4u92": macos.NO_ERR,
                  "com.microsoft.Word": macos.ERR_AE_EVENT_WOULD_REQUIRE_CONSENT}
@@ -89,6 +90,32 @@ class Doctor(unittest.TestCase):
         with mock.patch("good_night.shutdown.sudo_ok", return_value=(True, "")), \
              mock.patch.object(macos, "notifications_decided", return_value=False):
             self.assertEqual(doctor.failed(doctor.run_checks(self.cfg)), [])
+
+    def test_sleep_needs_no_sudo_and_no_quit_grants(self):
+        self.cfg.action = ""  # macOS default = sleep
+        with mock.patch("good_night.shutdown.sudo_ok", side_effect=AssertionError("sudo must not be checked")), \
+             mock.patch.object(macos, "notifications_decided", return_value=True), \
+             mock.patch.object(macos, "automation_permission", side_effect=AssertionError("no grants")):
+            checks = doctor.run_checks(self.cfg)
+        c = self.by_name(checks)
+        self.assertEqual(doctor.failed(checks), [])
+        self.assertIn("sleep", c["action"].detail)
+        self.assertEqual(c["sudo shutdown rule"].status, doctor.INFO)
+        self.assertEqual(c["quit apps"].status, doctor.INFO)
+
+    def test_display_off_needs_no_sudo(self):
+        self.cfg.action = "display-off"
+        with mock.patch("good_night.shutdown.sudo_ok", return_value=(False, "nope")), \
+             mock.patch.object(macos, "notifications_decided", return_value=True):
+            self.assertEqual(doctor.failed(doctor.run_checks(self.cfg)), [])
+
+    def test_hibernate_on_macos_fails_clearly(self):
+        self.cfg.action = "hibernate"
+        with mock.patch.object(macos, "notifications_decided", return_value=True):
+            checks = doctor.run_checks(self.cfg)
+        bad = doctor.failed(checks)
+        self.assertEqual([c.name for c in bad], ["action"])
+        self.assertIn("hibernatemode", bad[0].detail)
 
     def test_setup_marker_counts_as_decided(self):
         self.cfg.state_dir.mkdir()

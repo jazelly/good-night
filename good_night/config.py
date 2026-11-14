@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
 
+from . import system
+
 
 def _env_int(name: str, default: int) -> int:
     raw = os.environ.get(name)
@@ -46,8 +48,30 @@ DEFAULT_KEEP_APPS = [
 ]
 
 
+def _local_dirs(os_name: str) -> "tuple[Path, Path]":
+    """(log file, state dir) in each OS's usual place."""
+    home = Path.home()
+    if os_name == system.MACOS:
+        return home / "Library" / "Logs" / "good-night.log", home / "Library" / "Caches" / "good-night"
+    if os_name == system.WINDOWS:
+        base = Path(os.environ.get("LOCALAPPDATA") or (home / "AppData" / "Local")) / "good-night"
+        return base / "good-night.log", base
+    state = Path(os.environ.get("XDG_STATE_HOME") or (home / ".local" / "state")) / "good-night"
+    return state / "good-night.log", state
+
+
+def default_keep_apps(os_name: str) -> List[str]:
+    if os_name == system.WINDOWS:
+        from .windows import DEFAULT_KEEP_PROCESSES
+        return list(DEFAULT_KEEP_PROCESSES)
+    return list(DEFAULT_KEEP_APPS)
+
+
 @dataclass
 class Config:
+    #: raw GOOD_NIGHT_ACTION / --action; "" = platform default (see actions.resolve)
+    action: str = ""
+    platform: str = field(default_factory=system.current)
     interval: int = 60
     idle_checks: int = 3
     detectors: List[str] = field(default_factory=lambda: ["claude", "cursor"])
@@ -73,10 +97,14 @@ class Config:
 
 
 def load() -> Config:
+    os_name = system.current()
+    log_default, state_default = _local_dirs(os_name)
     claude_root = os.environ.get("CLAUDE_CONFIG_DIR")
     claude_default = (Path(claude_root) if claude_root else Path.home() / ".claude") / "projects"
     dry = _env_bool("GOOD_NIGHT_DRY_RUN", _env_bool("DRY_RUN", False))
     cfg = Config(
+        action=os.environ.get("GOOD_NIGHT_ACTION", "").strip(),
+        platform=os_name,
         interval=max(1, _env_int("GOOD_NIGHT_INTERVAL", 60)),
         idle_checks=max(1, _env_int("GOOD_NIGHT_IDLE_CHECKS", 3)),
         detectors=_env_list("GOOD_NIGHT_DETECTORS", ["claude", "cursor"]),
@@ -89,14 +117,13 @@ def load() -> Config:
         lookback_hours=max(1, _env_int("GOOD_NIGHT_LOOKBACK_HOURS", 12)),
         quit_apps=_env_bool("GOOD_NIGHT_QUIT_APPS", True),
         quit_wait=max(0, _env_int("GOOD_NIGHT_QUIT_WAIT", 20)),
-        keep_apps=DEFAULT_KEEP_APPS + _env_list("GOOD_NIGHT_KEEP_APPS", []),
+        keep_apps=default_keep_apps(os_name) + _env_list("GOOD_NIGHT_KEEP_APPS", []),
         caffeinate=_env_bool("GOOD_NIGHT_CAFFEINATE", True),
         claude_dir=Path(os.environ.get("GOOD_NIGHT_CLAUDE_DIR", str(claude_default))).expanduser(),
         cursor_dir=Path(
             os.environ.get("GOOD_NIGHT_CURSOR_DIR", str(Path.home() / ".cursor" / "projects"))
         ).expanduser(),
-        log_file=Path(
-            os.environ.get("GOOD_NIGHT_LOG", str(Path.home() / "Library" / "Logs" / "good-night.log"))
-        ).expanduser(),
+        log_file=Path(os.environ.get("GOOD_NIGHT_LOG", str(log_default))).expanduser(),
+        state_dir=state_default,
     )
     return cfg

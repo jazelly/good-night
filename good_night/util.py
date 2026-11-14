@@ -97,6 +97,13 @@ def recent_files(root: Path, pattern: str, since: datetime) -> Iterator[Path]:
 
 
 def pid_alive(pid: int) -> bool:
+    if os.name == "nt":
+        # os.kill(pid, 0) would send CTRL_C_EVENT on Windows.
+        from .windows import pid_alive as win_pid_alive
+        try:
+            return win_pid_alive(pid)
+        except (AttributeError, OSError):
+            return True  # can't tell: assume alive (terminals are info-only anyway)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
