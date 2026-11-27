@@ -1,7 +1,7 @@
 # good-night
 
 Go to bed while your AI coding agents finish their work. `good-night`
-watches **Claude Code** and **Cursor** and, once every agent session has been
+watches **Claude Code**, **Cursor**, and **Codex** and, once every agent session has been
 idle for a few checks in a row, puts the computer to **sleep** (macOS
 default), **hibernates** it (Windows default), turns the display off, or
 shuts it down. You choose with `GOOD_NIGHT_ACTION`.
@@ -114,6 +114,8 @@ Cursor [cursor]: 0 busy, 8 idle (sessions touched in last 12h)
   idle     18m ago  Desktop-github-my-proj-sub2api            turn ended (success)
   idle     85m ago  Desktop-github-my-proj-noop-desktop       stale: prompt sent, agent is working, but no activity for 85m
   info     81m ago  Desktop-github-my-proj-noop-desktop       background terminal still running: pnpm start (not counted)
+Codex [codex]: 0 busy, 3 idle (sessions touched in last 12h)
+  idle     12m ago  my-project / Bug fix                      turn complete
 
 => BUSY: sleep would wait
 ```
@@ -127,7 +129,7 @@ Everything is set with environment variables, and all of them are optional.
 | `GOOD_NIGHT_ACTION` | `sleep` (macOS, Linux), `hibernate` (Windows) | What to do once everything is idle: `sleep`, `hibernate`, `display-off`, `shutdown`. See [Actions](#actions). `watch --action` overrides it. |
 | `GOOD_NIGHT_INTERVAL` | `60` | Seconds between checks. |
 | `GOOD_NIGHT_IDLE_CHECKS` | `3` | Consecutive all-idle checks needed before the countdown starts (so 3 × 60s = 3 quiet minutes). |
-| `GOOD_NIGHT_DETECTORS` | `claude,cursor` | Which detectors to use. |
+| `GOOD_NIGHT_DETECTORS` | `claude,cursor,codex` | Which detectors to use. |
 | `DRY_RUN` / `GOOD_NIGHT_DRY_RUN` | `0` | `1` = log only, never quit apps or run the action. |
 | `GOOD_NIGHT_GRACE` | `60` | Countdown seconds (notification + dialog) before the action. `0` = no countdown. |
 | `GOOD_NIGHT_DIALOG` | `1` | Show the cancellable countdown dialog. |
@@ -141,6 +143,7 @@ Everything is set with environment variables, and all of them are optional.
 | `GOOD_NIGHT_CAFFEINATE` | `1` | Keep the computer awake while watching (`caffeinate -is` / `SetThreadExecutionState`), so it can't fall asleep on its own first. |
 | `GOOD_NIGHT_CLAUDE_DIR` | `$CLAUDE_CONFIG_DIR/projects` or `~/.claude/projects` | Claude Code transcripts. |
 | `GOOD_NIGHT_CURSOR_DIR` | `~/.cursor/projects` | Cursor transcripts. |
+| `GOOD_NIGHT_CODEX_DIR` | `$CODEX_HOME` or `~/.codex` | Codex sessions (uses `$CODEX_HOME` if set). |
 | `GOOD_NIGHT_LOG` | `~/Library/Logs/good-night.log` (Windows: `%LOCALAPPDATA%\good-night\good-night.log`) | Log file (also printed to stderr). |
 
 Example: check every 30s, need 10 quiet checks (5 min), 2-minute countdown,
@@ -420,6 +423,29 @@ command keeps its agent's turn open anyway, so it's already covered.
 is **ignored**. Those logs get a heartbeat line every 30 s
 (`Received frame ctx=worker-mode`) whether or not anything is running.
 
+### Codex
+
+Both Codex CLI and the Codex Desktop app write rollout transcripts as JSONL
+files under `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (default
+`~/.codex/sessions/`). Each line is a JSON object with `type`, optional
+`payload`, and `timestamp`:
+
+| Event | State |
+|---|---|
+| `type == "event_msg"`, `payload.type == "task_started"` | busy: turn started |
+| `type == "event_msg"`, `payload.type == "task_complete"` | idle: turn finished |
+| `type == "event_msg"`, `payload.type == "turn_aborted"` | idle: turn aborted |
+| `type == "response_item"` with tool calls/outputs | busy: tool running or model working |
+
+A session in progress has `task_started` and subsequent `response_item` records
+without a following `task_complete` or `turn_aborted`. Activity time comes from
+record timestamps (or file mtime if no timestamps). The detector reads the head
+of each file for session metadata (`cwd`, `agent_nickname`) and the tail for
+latest state, avoiding loading multi-MB files entirely.
+
+Subagent sessions (with `parent_thread_id` / `agent_nickname`) are tracked with
+clear labels.
+
 ### Known limitations
 
 - **Background jobs started by an agent after its turn ended** (e.g. Claude
@@ -447,7 +473,7 @@ python3 -m unittest discover -s tests -v
 
 ## Roadmap
 
-- [ ] **Codex CLI** detector (`~/.codex/sessions/**/rollout-*.jsonl`)
+- [x] **Codex CLI** detector (`~/.codex/sessions/**/rollout-*.jsonl`)
 - [ ] Optional process-tree check for agent-spawned background jobs
 - [ ] `launchd` agent / `good-night arm` for "shut down tonight after ..."
 - [x] Sleep / hibernate / display-off instead of shutdown (`GOOD_NIGHT_ACTION`)
