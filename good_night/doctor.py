@@ -228,7 +228,7 @@ def _linux_checks(cfg: Config, dry_run: bool, action: Optional[str]) -> List[Che
 
 def _data_checks(cfg: Config) -> List[Check]:
     checks: List[Check] = []
-    for name, path in (("claude", cfg.claude_dir), ("cursor", cfg.cursor_dir)):
+    for name, path in (("claude", cfg.claude_dir), ("cursor", cfg.cursor_dir), ("codex", cfg.codex_dir)):
         if name not in cfg.detectors:
             continue
         if not path.exists():

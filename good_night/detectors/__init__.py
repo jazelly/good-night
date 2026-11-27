@@ -8,10 +8,12 @@ from typing import Dict, List, Type
 from ..config import Config
 from .base import BUSY, IDLE, INFO, Detector, Session
 from .claude_code import ClaudeCodeDetector
+from .codex import CodexDetector
 from .cursor import CursorDetector
 
 REGISTRY: Dict[str, Type[Detector]] = {
     ClaudeCodeDetector.name: ClaudeCodeDetector,
+    CodexDetector.name: CodexDetector,
     CursorDetector.name: CursorDetector,
 }
 
